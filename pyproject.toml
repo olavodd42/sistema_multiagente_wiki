@@ -1,0 +1,23 @@
+[project]
+name = "sistema_multiagente"
+version = "0.1.0"
+description = "sistema_multiagente using crewAI"
+authors = [{ name = "Your Name", email = "you@example.com" }]
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "crewai[tools]>=0.108.0,<1.0.0"
+]
+
+[project.scripts]
+sistema_multiagente = "sistema_multiagente.main:run"
+run_crew = "sistema_multiagente.main:run"
+train = "sistema_multiagente.main:train"
+replay = "sistema_multiagente.main:replay"
+test = "sistema_multiagente.main:test"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.crewai]
+type = "crew"

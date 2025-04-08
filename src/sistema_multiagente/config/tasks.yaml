@@ -1,0 +1,26 @@
+research_task:
+  description: >
+    Pesquise informações completas sobre '{topic}'. Identifique de 3 a 5 artigos
+    relevantes da Wikipedia, escolha os mais apropriados e extraia seu conteúdo.
+    Organize as informações em tópicos principais.
+  expected_output: >
+    Um resumo estruturado das informações coletadas, com os principais tópicos e
+    fatos sobre o tema.
+  agent: researcher
+
+writing_task:
+  description: >
+    Com base nas informações fornecidas pelo Pesquisador, escreva um artigo informativo
+    com no mínimo 300 palavras. O artigo deve ter introdução, desenvolvimento e conclusão.
+    Inclua subtítulos relevantes e organize o conteúdo de forma lógica.
+  expected_output: >
+    Um artigo bem estruturado com no mínimo 300 palavras sobre o tema solicitado.
+  agent: writer
+
+editing_task:
+  description: >
+    Revise o artigo fornecido pelo Redator. Verifique a clareza, coesão, gramática e formatação.
+    Faça as correções necessárias e sugira melhorias quando apropriado.
+  expected_output: >
+    O artigo final revisado e pronto para publicação.
+  agent: editor
