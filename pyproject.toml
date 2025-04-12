@@ -5,15 +5,21 @@ description = "sistema_multiagente using crewAI"
 authors = [{ name = "Your Name", email = "you@example.com" }]
 requires-python = ">=3.10,<3.13"
 dependencies = [
-    "crewai[tools]>=0.108.0,<1.0.0"
+    "crewai[tools]>=0.108.0,<1.0.0",
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.0.0",
+    "requests>=2.31.0"
 ]
 
 [project.scripts]
-sistema_multiagente = "sistema_multiagente.main:run"
-run_crew = "sistema_multiagente.main:run"
+sistema_multiagente = "sistema_multiagente.run_crew:main"
+run_crew = "sistema_multiagente.run_crew:main"
 train = "sistema_multiagente.main:train"
 replay = "sistema_multiagente.main:replay"
 test = "sistema_multiagente.main:test"
+serve = "sistema_multiagente.main:serve"
 
 [build-system]
 requires = ["hatchling"]

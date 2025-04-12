@@ -1,77 +1,143 @@
 from crewai import Agent, Crew, Process, Task
-from crewai.tools import tool
 from crewai.project import CrewBase, agent, crew, task
+from crewai.tools import tool
+from pydantic import BaseModel, Field
+from typing import List, Dict, Any
 import requests
 import json
 
-# If you want to run a snippet of code before or after the crew starts,
-# you can use the @before_kickoff and @after_kickoff decorators
-# https://docs.crewai.com/concepts/crews#example-crew-class-with-decorators
+class WikipediaArticle(BaseModel):
+    """Modelo para artigos da Wikipedia"""
+    title: str
+    content: str
+    pageid: str
 
-class WikipediaTools:
-    @tool("Buscar na Wikipedia")
-    def search_wikipedia(self, query: str) -> str:
-        """Busca por artigos na Wikipedia relacionados ao termo de pesquisa"""
+class ResearchResult(BaseModel):
+    """Modelo para resultados de pesquisa"""
+    topic: str
+    articles: List[WikipediaArticle]
+    summary: str
+
+class WrittenArticle(BaseModel):
+    """Modelo para o artigo escrito"""
+    title: str
+    introduction: str
+    body: str
+    conclusion: str
+    word_count: int
+
+class EditedArticle(BaseModel):
+    """Modelo para o artigo editado"""
+    title: str
+    introduction: str
+    body: str
+    conclusion: str
+    word_count: int
+    improvements: List[str]
+
+# Definindo as ferramentas como funções decoradas com @tool
+@tool("Buscar na Wikipedia")
+def search_wikipedia(query: str) -> str:
+    """
+    Busca por artigos na Wikipedia relacionados ao termo de pesquisa.
+    
+    Args:
+        query: Termo de busca
+        
+    Returns:
+        Resultado da busca em formato JSON string
+    """
+    try:
         params = {
             "action": "query",
             "format": "json",
             "list": "search",
             "srsearch": query,
-            "srlimit": 5
+            "srlimit": 5,
+            "utf8": 1
         }
         response = requests.get("https://pt.wikipedia.org/w/api.php", params=params)
         data = response.json()
         
         if "query" in data and "search" in data["query"]:
             results = data["query"]["search"]
-            return json.dumps([{"title": item["title"], "pageid": item["pageid"]} for item in results])
+            results_list = [{"title": item["title"], "pageid": str(item["pageid"])} for item in results]
+            return json.dumps(results_list)
         return "Nenhum resultado encontrado."
+    except Exception as e:
+        return f"Erro na busca: {str(e)}"
 
-    @tool("Obter conteúdo da Wikipedia")
-    def get_wikipedia_content(self, page_id: str) -> str:
-        """Obtém o conteúdo de uma página da Wikipedia pelo seu ID"""
+@tool("Obter conteúdo da Wikipedia")
+def get_wikipedia_content(page_id: str) -> str:
+    """
+    Obtém o conteúdo de uma página da Wikipedia pelo seu ID.
+    
+    Args:
+        page_id: ID da página da Wikipedia
+        
+    Returns:
+        Conteúdo da página
+    """
+    try:
         params = {
             "action": "query",
             "format": "json",
             "prop": "extracts",
             "pageids": page_id,
             "explaintext": True,
-            "exsectionformat": "plain"
+            "exsectionformat": "plain",
+            "utf8": 1
         }
         response = requests.get("https://pt.wikipedia.org/w/api.php", params=params)
         data = response.json()
         
         if "query" in data and "pages" in data["query"]:
-            page = data["query"]["pages"][page_id]
-            if "extract" in page:
+            page = data["query"]["pages"].get(page_id)
+            if page and "extract" in page:
                 return page["extract"]
             return "Não foi possível obter o conteúdo."
-    
-wikipedia_tools = WikipediaTools()
+        return "Página não encontrada."
+    except Exception as e:
+        return f"Erro ao obter conteúdo: {str(e)}"
 
 @CrewBase
 class SistemaMultiagente():
-    """SistemaMultiagente crew"""
+    """
+    SistemaMultiagente crew para geração de artigos com base em pesquisas na Wikipedia.
+    
+    Esta classe implementa um sistema multiagente usando CrewAI para:
+    1. Pesquisar informações sobre um tópico na Wikipedia
+    2. Escrever um artigo com base nas informações coletadas
+    3. Revisar e editar o artigo para melhorar sua qualidade
+    """
 
-    # Learn more about YAML configuration files here:
-    # Agents: https://docs.crewai.com/concepts/agents#yaml-configuration-recommended
-    # Tasks: https://docs.crewai.com/concepts/tasks#yaml-configuration-recommended
+    # Configuração via YAML
     agents_config = 'config/agents.yaml'
     tasks_config = 'config/tasks.yaml'
 
-    # If you would like to add tools to your agents, you can learn more about it here:
-    # https://docs.crewai.com/concepts/agents#agent-tools
     @agent
     def researcher(self) -> Agent:
+        """
+        Cria um agente pesquisador que coleta informações sobre o tópico.
+        
+        Returns:
+            Agent: O agente pesquisador configurado
+        """
         return Agent(
             config=self.agents_config['researcher'],
             verbose=True,
-            tools=[wikipedia_tools.search_wikipedia, wikipedia_tools.get_wikipedia_content],
+            tools=[search_wikipedia, get_wikipedia_content],
             allow_delegation=True
         )
 
     @agent
     def writer(self) -> Agent:
+        """
+        Cria um agente escritor que transforma as pesquisas em um artigo coeso.
+        
+        Returns:
+            Agent: O agente escritor configurado
+        """
         return Agent(
             config=self.agents_config['writer'],
             verbose=True,
@@ -80,21 +146,41 @@ class SistemaMultiagente():
     
     @agent
     def editor(self) -> Agent:
+        """
+        Cria um agente editor que revisa e melhora o artigo final.
+        
+        Returns:
+            Agent: O agente editor configurado
+        """
         return Agent(
             config=self.agents_config['editor'],
             verbose=True,
             allow_delegation=True
         )
 
-    # Fix the indentation for these task methods - they should be at the same level as agent methods
     @task
     def research_task(self) -> Task:
+        """
+        Define a tarefa de pesquisa.
+        
+        Returns:
+            Task: A tarefa de pesquisa configurada
+        """
         return Task(
             config=self.tasks_config['research_task'],
         )
 
     @task
     def writing_task(self, context=None) -> Task:
+        """
+        Define a tarefa de escrita.
+        
+        Args:
+            context: Contexto opcional da tarefa anterior
+            
+        Returns:
+            Task: A tarefa de escrita configurada
+        """
         return Task(
             config=self.tasks_config['writing_task'],
             context=context
@@ -102,6 +188,15 @@ class SistemaMultiagente():
     
     @task
     def editing_task(self, context=None) -> Task:
+        """
+        Define a tarefa de edição.
+        
+        Args:
+            context: Contexto opcional da tarefa anterior
+            
+        Returns:
+            Task: A tarefa de edição configurada
+        """
         return Task(
             config=self.tasks_config['editing_task'],
             context=context
@@ -109,8 +204,13 @@ class SistemaMultiagente():
 
     @crew
     def crew(self) -> Crew:
-        """Creates the SistemaMultiagente crew"""
-        # Create tasks as before
+        """
+        Cria a tripulação de agentes e configura seu fluxo de trabalho.
+        
+        Returns:
+            Crew: A tripulação configurada
+        """
+        # Create tasks
         research = Task(
             config=self.tasks_config['research_task'],
             agent=self.researcher()

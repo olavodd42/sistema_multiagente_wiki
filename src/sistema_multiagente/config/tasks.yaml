@@ -24,3 +24,4 @@ editing_task:
   expected_output: >
     O artigo final revisado e pronto para publicação.
   agent: editor
+  output_file: artigo.md
