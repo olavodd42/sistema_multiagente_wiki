@@ -19,7 +19,7 @@ class ArticleRequest(BaseModel):
     """Model for article generation request"""
     topic: str = Field(..., description="Topic to research and write about")
     min_words: int = Field(300, description="Minimum word count for the article")
-    llm_provider: str = Field("groq", description="LLM provider (groq, gemini, openai)")
+    llm_provider: str = Field("local", description="LLM provider (groq, gemini, openai, local)")
     
 class ArticleResponse(BaseModel):
     """Model for article generation response"""
@@ -200,7 +200,7 @@ async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "version": "2.0.0"}
 
-def cli_run(topic=None, llm_provider="groq"):
+def cli_run(topic=None, llm_provider="local"):
     """
     Run the crew via CLI.
     

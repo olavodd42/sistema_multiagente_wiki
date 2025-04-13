@@ -167,31 +167,55 @@ class SistemaMultiagente():
     agents_config = 'config/agents.yaml'
     tasks_config = 'config/tasks.yaml'
     
-    def __init__(self, llm_provider: str = 'groq'):
+    def __init__(self, llm_provider: str = 'local'):
         """
         Inicializa o sistema multiagente.
         
         Args:
-            llm_provider: Provedor de LLM a ser utilizado ('openai', 'groq', 'gemini')
+            llm_provider: Provedor de LLM a ser utilizado ('openai', 'groq', 'gemini', 'local')
         """
         self.llm_provider = llm_provider
         
         # Configurar LLM com base no provedor
         if llm_provider == 'groq':
             self.api_key = os.getenv('GROQ_API_KEY')
+            if not self.api_key:
+                raise ValueError("GROQ_API_KEY not set in environment variables")
+            from langchain_groq import ChatGroq
             self.llm = ChatGroq(
                 groq_api_key=self.api_key,
                 model_name="llama3-70b-8192"
             )
         elif llm_provider == 'gemini':
             self.api_key = os.getenv('GOOGLE_API_KEY')
+            if not self.api_key:
+                raise ValueError("GOOGLE_API_KEY not set in environment variables")
+            from langchain_google_genai import ChatGoogleGenerativeAI
             self.llm = ChatGoogleGenerativeAI(
                 google_api_key=self.api_key,
                 model="gemini-1.5-pro"
             )
+        elif llm_provider == 'local':
+            # Use a local model provider like Ollama or a similar option
+            print("Using local LLM provider - no API key required")
+            from langchain_ollama import OllamaLLM
+            try:
+                self.llm = OllamaLLM(
+                    model="ollama/llama3.1",  # Add the "ollama/" prefix to the model name
+                    base_url="http://localhost:11434",
+                    temperature=0.7,
+                    timeout=180  # Changed from request_timeout to timeout
+                )
+            except Exception as e:
+                print(f"Error connecting to Ollama: {str(e)}")
+                print("Make sure the Ollama server is running (ollama serve)")
+                print("Make sure you've pulled the llama3.1 model with: ollama pull llama3.1")
+                raise ValueError(f"Failed to initialize Ollama: {str(e)}")
         else:
             # Usar OpenAI como padrão
             self.api_key = os.getenv('OPENAI_API_KEY')
+            if not self.api_key:
+                raise ValueError("OPENAI_API_KEY not set in environment variables")
             self.llm = None  # CrewAI usa OpenAI por padrão
 
     @agent
@@ -336,13 +360,13 @@ class SistemaMultiagente():
         }
         
         return Task(
-            description=task_config["description"],
-            expected_output=task_config["expected_output"],
-            agent=self.editor(),
-            context=context,
-            output_file="artigo.md"
+                description=task_config["description"],
+                expected_output=task_config["expected_output"],
+                agent=self.editor(),
+                context=context,
+                output_file="artigo.md"
         )
-
+    
     @crew
     def create_crew(self) -> Crew:
         """
@@ -351,17 +375,19 @@ class SistemaMultiagente():
         Returns:
             Crew: A tripulação configurada
         """
-        # Create tasks
+        # Create agents
+        researcher_agent = self.researcher()
+        writer_agent = self.writer()
+        editor_agent = self.editor()
+        
+        # Create tasks without explicitly setting context
         research = self.research_task()
-        
         writing = self.writing_task()
-        writing.dependencies = [research]
-        
         editing = self.editing_task()
-        editing.dependencies = [writing]
         
+        # Define the workflow - the sequential process will handle the dependencies
         return Crew(
-            agents=[self.researcher(), self.writer(), self.editor()],
+            agents=[researcher_agent, writer_agent, editor_agent],
             tasks=[research, writing, editing],
             process=Process.sequential,
             verbose=True,
@@ -381,25 +407,66 @@ class SistemaMultiagente():
             'topic': topic
         }
         
-        result = self.create_crew().kickoff(inputs=inputs)
-        
-        # Converter resultado para EditedArticle se ainda não estiver nesse formato
-        if isinstance(result, dict):
-            return EditedArticle(**result)
-        elif isinstance(result, str):
-            # Tentar processar string como JSON
-            try:
-                data = json.loads(result)
-                return EditedArticle(**data)
-            except:
-                # Se não for JSON, criar um artigo básico
+        # Add better error handling and logging
+        try:
+            result = self.create_crew().kickoff(inputs=inputs)
+            
+            # Log the result type and content for debugging
+            print(f"Crew result type: {type(result)}")
+            print(f"Crew result content: {result}")
+            
+            # Handle different result types
+            if result is None:
+                # Create a default article when result is None
                 return EditedArticle(
                     title=f"Artigo sobre {topic}",
-                    introduction="Introdução ao artigo",
+                    introduction="Não foi possível gerar o artigo.",
                     sections=[],
-                    conclusion=result,
-                    word_count=len(result.split()),
-                    improvements=["Artigo gerado com formato não estruturado"]
+                    conclusion="Erro no processamento do fluxo de trabalho.",
+                    word_count=0,
+                    improvements=["Falha na geração do artigo"]
                 )
-        
-        return result
+            elif isinstance(result, EditedArticle):
+                return result
+            elif isinstance(result, dict):
+                return EditedArticle(**result)
+            elif isinstance(result, str):
+                # Try to process string as JSON first
+                try:
+                    data = json.loads(result)
+                    return EditedArticle(**data)
+                except json.JSONDecodeError:
+                    # If not JSON, create a basic article
+                    return EditedArticle(
+                        title=f"Artigo sobre {topic}",
+                        introduction="Introdução gerada automaticamente",
+                        sections=[],
+                        conclusion=result,
+                        word_count=len(result.split()),
+                        improvements=["Artigo gerado com formato não estruturado"]
+                    )
+            else:
+                # For any other type
+                return EditedArticle(
+                    title=f"Artigo sobre {topic}",
+                    introduction="Resultado em formato não esperado",
+                    sections=[],
+                    conclusion=str(result),
+                    word_count=len(str(result).split()),
+                    improvements=["Formato de resultado não suportado"]
+                )
+        except Exception as e:
+            # Log the exception
+            print(f"Error in crew execution: {e}")
+            # Return a fallback article
+            return EditedArticle(
+                title=f"Erro na geração do artigo sobre {topic}",
+                introduction="Ocorreu um erro durante a geração do artigo.",
+                sections=[ArticleSection(
+                    title="Detalhes do erro",
+                    content=str(e)
+                )],
+                conclusion="Por favor, tente novamente mais tarde.",
+                word_count=0,
+                improvements=["Resolver o erro: " + str(e)]
+            )

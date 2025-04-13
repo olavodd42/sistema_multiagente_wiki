@@ -1,4 +1,3 @@
-
 # Dependências básicas
 crewai>=0.28.0
 langchain>=0.1.0
@@ -8,6 +7,7 @@ pydantic>=2.0.0
 langchain-groq>=0.1.0  # Suporte para Groq
 langchain-google-genai>=0.1.0  # Suporte para Gemini
 langchain-openai>=0.1.0  # Suporte para OpenAI
+langchain-ollama>=0.0.1  # Suporte para Ollama local models
 
 # Ferramentas e utilidades
 requests>=2.0.0
